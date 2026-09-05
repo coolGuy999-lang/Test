@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Roblox Clone Listen Server</title>
+    <!-- Подключаем библиотеку сокетов -->
+    <script src="https://socket.io"></script>
+</head>
+<body>
+    <h1 id="status">Загрузка...</h1>
+    <div id="game-zone"></div>
+
+    <script>
+        // !!! ЗАМЕНИ ЭТУ ССЫЛКУ НА СВОЮ ССЫЛКУ ОТ RENDER !!!
+        const socket = io("https://onrender.com"); 
+
+        // Берем ID комнаты из адресной строки (например, ://site.com)
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomId = urlParams.get('room');
+        let isHost = false;
+
+        socket.on('connect', () => {
+            if (!roomId) {
+                // Если ссылки на комнату нет — этот игрок ХОСТ
+                isHost = true;
+                roomId = Math.random().toString(36).substring(2, 7); // Генерируем случайный ID
+                window.history.pushState({}, '', `?room=${roomId}`); // Добавляем ID в адресную строку
+                
+                document.getElementById('status').innerText = `Ты ХОСТ. Скинь ссылку другу: ${window.location.href}`;
+                socket.emit('create-room', roomId);
+                
+                startHostLoop(); // Запускаем просчет физики и логики игры
+            } else {
+                // Если в ссылке уже есть ID — этот игрок ЛОКАЛЬНЫЙ КЛИЕНТ
+                document.getElementById('status').innerText = `Ты подключился к комнате: ${roomId}`;
+                socket.emit('join-room', roomId);
+                
+                startClientLoop(); // Просто отправляем нажатия кнопок хосту
+            }
+        });
+
+        // --- ЛОГИКА ХОСТА ---
+        function startHostLoop() {
+            // Сюда нейросеть допишет твой игровой движок. 
+            // Браузер хоста считает всё. Когда данные обновляются, шлем их клиентам:
+            setInterval(() => {
+                let gameState = { players: { /* координаты всех */ } }; 
+                socket.emit('send-to-clients', { roomId, data: gameState });
+            }, 1000 / 30); // 30 раз в секунду
+        }
+
+        // Прием данных от локальных игроков на стороне хоста
+        socket.on('from-client', ({ clientId, data }) => {
+            console.log(`Хост получил нажатие кнопки от игрока ${clientId}:`, data);
+            // Хост двигает персонажа этого игрока у себя в памяти
+        });
+
+
+        // --- ЛОГИКА КЛИЕНТА ---
+        function startClientLoop() {
+            // Локальный игрок нажимает кнопки — шлем хосту
+            window.addEventListener('keydown', (e) => {
+                socket.emit('send-to-host', { roomId, data: { key: e.key } });
+            });
+        }
+
+        // Прием готовой картинки мира от хоста
+        socket.on('from-host', (gameState) => {
+            // Клиент просто отрисовывает то, что прислал хост
+        });
+
+        socket.on('host-disconnected', () => {
+            alert('Хост вышел из игры, сервер закрыт.');
+        });
+    </script>
+</body>
+</html>
